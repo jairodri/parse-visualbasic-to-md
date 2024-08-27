@@ -3,58 +3,41 @@ import re
 
 def parse_vb_file(file_path):
     """
-    Parses a Visual Basic code file to extract functions, subroutines, 
-    and calls.
+    Parses a Visual Basic code file to extract the full definitions of functions and subroutines.
 
-    This function reads a VB file, identifies and extracts the names of 
-    functions, subroutines, and calls (procedures) defined in the code. It 
-    handles optional access modifiers like 'Public', 'Private', and 'Friend' 
-    that may precede function and subroutine declarations.
+    This function reads a VB file and identifies the full lines of function and subroutine 
+    declarations, preserving the order in which they appear in the code. It handles optional 
+    access modifiers like 'Public', 'Private', and 'Friend' that may precede function and 
+    subroutine declarations.
 
     Args:
         file_path (str): The path to the VB file to parse.
 
     Returns:
-        dict: A dictionary containing three lists:
-            - 'functions': A list of function names defined in the VB6 file.
-            - 'subs': A list of subroutine names defined in the VB6 file.
-            - 'calls': A list of function or subroutine calls found in the VB6 file.
+        list: A list containing the full definitions of functions and subroutines as they appear 
+        in the VB6 file.
     """
     with open(file_path, 'r', encoding='latin-1') as file:
         code = file.readlines()
 
-    functions = []
-    subs = []
-    calls = []
+    definitions = []
 
-    # Regular expression updated to detect functions and subroutines with optional access modifiers
-    function_regex = re.compile(r'^(Public |Private |Friend )?Function (\w+)', re.IGNORECASE)
-    sub_regex = re.compile(r'^(Public |Private |Friend )?Sub (\w+)', re.IGNORECASE)
-    call_regex = re.compile(r'^\s*Call (\w+)', re.IGNORECASE)
+    # Regular expressions updated to detect full function and subroutine definitions
+    function_regex = re.compile(r'^(Public |Private |Friend )?Function .+', re.IGNORECASE)
+    sub_regex = re.compile(r'^(Public |Private |Friend )?Sub .+', re.IGNORECASE)
 
     for line in code:
         line = line.strip()
 
-        # Detect functions and subroutines with optional modifiers
-        func_match = function_regex.match(line)
-        sub_match = sub_regex.match(line)
-        call_match = call_regex.match(line)
+        # Detect full function and subroutine definitions with optional modifiers
+        if function_regex.match(line):
+            # Add the full function definition to the list
+            definitions.append(line)
+        elif sub_regex.match(line):
+            # Add the full subroutine definition to the list
+            definitions.append(line)
 
-        if func_match:
-            # Capture the function name, which is the second group in the regular expression
-            functions.append(func_match.group(2))
-        elif sub_match:
-            # Capture the subroutine name, which is the second group in the regular expression
-            subs.append(sub_match.group(2))
-        elif call_match:
-            # Capture the name of the function or subroutine being called
-            calls.append(call_match.group(1))
-
-    return {
-        'functions': functions,
-        'subs': subs,
-        'calls': calls
-    }
+    return definitions
 
 
 def parse_directory(directory):
@@ -63,7 +46,7 @@ def parse_directory(directory):
     subroutines, and calls.
 
     This function traverses a given directory recursively, looking for VB files with the 
-    extensions '.frm', '.bas', and '.cls'. It uses the parse_vb6_file function to extract 
+    extensions '.frm', '.bas', and '.cls'. It uses the parse_vb_file function to extract 
     information from each file and collects this data into a dictionary.
 
     Args:
@@ -71,7 +54,7 @@ def parse_directory(directory):
 
     Returns:
         dict: A dictionary where each key is a filename and each value is the parsed data from 
-        that file, including lists of functions, subroutines, and calls.
+        that file.
     """
     parsed_data = {}
 
@@ -85,4 +68,34 @@ def parse_directory(directory):
                 parsed_data[file] = parse_vb_file(file_path)
 
     return parsed_data
+
+
+def generate_markdown(parsed_data):
+    """
+    Generates a markdown representation from the parsed Visual Basic files data.
+
+    This function takes the parsed data from VB files and generates markdown content 
+    that includes the full definitions of functions and subroutines as they appear 
+    in the original files.
+
+    Args:
+        parsed_data (dict): A dictionary where each key is a filename and each value is a list 
+        of definitions (functions and subroutines) extracted from that file.
+
+    Returns:
+        str: A string containing the markdown content representing the parsed VB files data.
+    """
+    md_content = []
+
+    for file, definitions in parsed_data.items():
+        md_content.append(f"# {file}\n")
+        md_content.append("## Definitions\n")
+
+        for definition in definitions:
+            md_content.append(f"- {definition}")
+        
+        md_content.append("\n")
+
+    return "\n".join(md_content)
+
 
