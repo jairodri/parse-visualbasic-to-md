@@ -1,15 +1,15 @@
-import os
 import re
+import os
 
 def parse_vb_file(file_path):
     """
     Parses a Visual Basic code file to extract the full definitions of functions, subroutines, 
-    and variables.
+    variables, and calls.
 
     This function reads a VB file and identifies the full lines of function and subroutine 
-    declarations, as well as variable declarations using 'Dim'. It distinguishes between variables 
-    declared at the module level (global to the file) and those declared inside functions or 
-    subroutines (local).
+    declarations, as well as variable declarations using 'Dim' and calls using 'Call'. 
+    It distinguishes between variables declared at the module level (global to the file) and 
+    those declared inside functions or subroutines (local).
 
     Args:
         file_path (str): The path to the VB file to parse.
@@ -21,6 +21,7 @@ def parse_vb_file(file_path):
                 - 'type': The type of definition ('Function' or 'Sub').
                 - 'definition': The full definition line of the function or subroutine.
                 - 'local_vars': A list of variable declarations inside the function or subroutine.
+                - 'calls': A list of calls inside the function or subroutine.
     """
     with open(file_path, 'r', encoding='latin-1') as file:
         code = file.readlines()
@@ -29,10 +30,11 @@ def parse_vb_file(file_path):
     definitions = []
     current_definition = None
 
-    # Regular expressions to detect full function and subroutine definitions and variable declarations
-    function_regex = re.compile(r'^(Public |Private |Friend )?Function .+', re.IGNORECASE)
-    sub_regex = re.compile(r'^(Public |Private |Friend )?Sub .+', re.IGNORECASE)
+    # Regular expressions to detect full function and subroutine definitions, variable declarations, and calls
+    function_regex = re.compile(r'^(Public |Private )?Function .+', re.IGNORECASE)
+    sub_regex = re.compile(r'^(Public |Private )?Sub .+', re.IGNORECASE)
     dim_regex = re.compile(r'^\s*Dim\s+\w+', re.IGNORECASE)
+    call_regex = re.compile(r'^\s*Call\s+\w+', re.IGNORECASE)
 
     for line in code:
         line = line.strip()
@@ -45,6 +47,12 @@ def parse_vb_file(file_path):
             else:
                 # We are at the module level
                 module_level_vars.append(line)
+
+        # Check for calls
+        elif call_regex.match(line):
+            if current_definition:
+                # We are inside a function or subroutine, so add to calls
+                current_definition['calls'].append(line)
         
         # Detect full function and subroutine definitions with optional modifiers
         elif function_regex.match(line) or sub_regex.match(line):
@@ -56,7 +64,8 @@ def parse_vb_file(file_path):
             current_definition = {
                 'type': 'Function' if function_regex.match(line) else 'Sub',
                 'definition': line,
-                'local_vars': []
+                'local_vars': [],
+                'calls': []  # Initialize calls list for the current definition
             }
     
     # If we end with a definition still open, add it to the list
@@ -105,7 +114,8 @@ def generate_markdown(parsed_data):
 
     This function takes the parsed data from VB files and generates markdown content 
     that includes the module-level variable declarations, function and subroutine 
-    definitions, and local variable declarations inside those functions and subroutines.
+    definitions, local variable declarations inside those functions and subroutines, 
+    and calls made within those functions and subroutines.
 
     Args:
         parsed_data (dict): A dictionary where each key is a filename and each value is a 
@@ -115,6 +125,7 @@ def generate_markdown(parsed_data):
                 - 'type': The type of definition ('Function' or 'Sub').
                 - 'definition': The full definition line of the function or subroutine.
                 - 'local_vars': A list of variable declarations inside the function or subroutine.
+                - 'calls': A list of calls inside the function or subroutine.
 
     Returns:
         str: A string containing the markdown content representing the parsed VB files data.
@@ -124,25 +135,31 @@ def generate_markdown(parsed_data):
     for file, data in parsed_data.items():
         md_content.append(f"# {file}\n")
         
-        # Agregar variables a nivel de módulo
+        # Add module-level variables
         if data['module_level_vars']:
             md_content.append("## Module Level Variables\n")
             for var in data['module_level_vars']:
                 md_content.append(f"- {var}")
             md_content.append("\n")
 
-        # Agregar definiciones de funciones y subrutinas
+        # Add function and subroutine definitions
         md_content.append("## Definitions\n")
         for definition in data['definitions']:
             md_content.append(f"- **{definition['type']}**: {definition['definition']}")
-            # Agregar variables locales con un nivel de indentación mayor
+            
+            # Add local variables with increased indentation
             if definition['local_vars']:
                 md_content.append("  - **Local Variables**:")
                 for local_var in definition['local_vars']:
                     md_content.append(f"    - {local_var}")
+            
+            # Add calls with increased indentation
+            if definition['calls']:
+                md_content.append("  - **Calls**:")
+                for call in definition['calls']:
+                    md_content.append(f"    - {call}")
+            
             md_content.append("\n")
     
     return "\n".join(md_content)
-
-
 
