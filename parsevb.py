@@ -108,14 +108,14 @@ def parse_directory(directory):
     return parsed_data
 
 
-def generate_markdown(parsed_data):
+def generate_markdown(parsed_data, output_dir):
     """
-    Generates a markdown representation from the parsed Visual Basic files data.
+    Generates separate markdown files for each Visual Basic file parsed.
 
-    This function takes the parsed data from VB files and generates markdown content 
-    that includes the module-level variable declarations, function and subroutine 
-    definitions, local variable declarations inside those functions and subroutines, 
-    and calls made within those functions and subroutines.
+    This function takes the parsed data from VB files and generates separate markdown files 
+    for each VB file. Each markdown file includes the module-level variable declarations, 
+    function and subroutine definitions, local variable declarations inside those functions 
+    and subroutines, and calls made within those functions and subroutines.
 
     Args:
         parsed_data (dict): A dictionary where each key is a filename and each value is a 
@@ -126,13 +126,16 @@ def generate_markdown(parsed_data):
                 - 'definition': The full definition line of the function or subroutine.
                 - 'local_vars': A list of variable declarations inside the function or subroutine.
                 - 'calls': A list of calls inside the function or subroutine.
+        output_dir (str): The directory where the markdown files will be saved.
 
     Returns:
-        str: A string containing the markdown content representing the parsed VB files data.
+        None
     """
-    md_content = []
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok=True)
 
     for file, data in parsed_data.items():
+        md_content = []
         md_content.append(f"# {file}\n")
         
         # Add module-level variables
@@ -160,6 +163,11 @@ def generate_markdown(parsed_data):
                     md_content.append(f"    - {call}")
             
             md_content.append("\n")
-    
-    return "\n".join(md_content)
+        
+        # Generate the markdown file path
+        md_file_path = os.path.join(output_dir, f"{file}.md")
+
+        # Write the markdown content to the file
+        with open(md_file_path, 'w', encoding='utf-8') as md_file:
+            md_file.write("\n".join(md_content))
 
