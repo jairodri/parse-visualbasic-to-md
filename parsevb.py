@@ -3,41 +3,70 @@ import re
 
 def parse_vb_file(file_path):
     """
-    Parses a Visual Basic code file to extract the full definitions of functions and subroutines.
+    Parses a Visual Basic code file to extract the full definitions of functions, subroutines, 
+    and variables.
 
     This function reads a VB file and identifies the full lines of function and subroutine 
-    declarations, preserving the order in which they appear in the code. It handles optional 
-    access modifiers like 'Public', 'Private', and 'Friend' that may precede function and 
-    subroutine declarations.
+    declarations, as well as variable declarations using 'Dim'. It distinguishes between variables 
+    declared at the module level (global to the file) and those declared inside functions or 
+    subroutines (local).
 
     Args:
         file_path (str): The path to the VB file to parse.
 
     Returns:
-        list: A list containing the full definitions of functions and subroutines as they appear 
-        in the VB6 file.
+        dict: A dictionary containing:
+            - 'module_level_vars': A list of variable declarations at the module level.
+            - 'definitions': A list of dictionaries, each containing:
+                - 'type': The type of definition ('Function' or 'Sub').
+                - 'definition': The full definition line of the function or subroutine.
+                - 'local_vars': A list of variable declarations inside the function or subroutine.
     """
     with open(file_path, 'r', encoding='latin-1') as file:
         code = file.readlines()
 
+    module_level_vars = []
     definitions = []
+    current_definition = None
 
-    # Regular expressions updated to detect full function and subroutine definitions
+    # Regular expressions to detect full function and subroutine definitions and variable declarations
     function_regex = re.compile(r'^(Public |Private |Friend )?Function .+', re.IGNORECASE)
     sub_regex = re.compile(r'^(Public |Private |Friend )?Sub .+', re.IGNORECASE)
+    dim_regex = re.compile(r'^\s*Dim\s+\w+', re.IGNORECASE)
 
     for line in code:
         line = line.strip()
 
+        # Check for variable declarations
+        if dim_regex.match(line):
+            if current_definition:
+                # We are inside a function or subroutine, so add to local variables
+                current_definition['local_vars'].append(line)
+            else:
+                # We are at the module level
+                module_level_vars.append(line)
+        
         # Detect full function and subroutine definitions with optional modifiers
-        if function_regex.match(line):
-            # Add the full function definition to the list
-            definitions.append(line)
-        elif sub_regex.match(line):
-            # Add the full subroutine definition to the list
-            definitions.append(line)
+        elif function_regex.match(line) or sub_regex.match(line):
+            if current_definition:
+                # If we are already inside a definition, save the current one
+                definitions.append(current_definition)
+            
+            # Start a new function or subroutine definition
+            current_definition = {
+                'type': 'Function' if function_regex.match(line) else 'Sub',
+                'definition': line,
+                'local_vars': []
+            }
+    
+    # If we end with a definition still open, add it to the list
+    if current_definition:
+        definitions.append(current_definition)
 
-    return definitions
+    return {
+        'module_level_vars': module_level_vars,
+        'definitions': definitions
+    }
 
 
 def parse_directory(directory):
@@ -75,27 +104,45 @@ def generate_markdown(parsed_data):
     Generates a markdown representation from the parsed Visual Basic files data.
 
     This function takes the parsed data from VB files and generates markdown content 
-    that includes the full definitions of functions and subroutines as they appear 
-    in the original files.
+    that includes the module-level variable declarations, function and subroutine 
+    definitions, and local variable declarations inside those functions and subroutines.
 
     Args:
-        parsed_data (dict): A dictionary where each key is a filename and each value is a list 
-        of definitions (functions and subroutines) extracted from that file.
+        parsed_data (dict): A dictionary where each key is a filename and each value is a 
+        dictionary containing:
+            - 'module_level_vars': A list of variable declarations at the module level.
+            - 'definitions': A list of dictionaries, each containing:
+                - 'type': The type of definition ('Function' or 'Sub').
+                - 'definition': The full definition line of the function or subroutine.
+                - 'local_vars': A list of variable declarations inside the function or subroutine.
 
     Returns:
         str: A string containing the markdown content representing the parsed VB files data.
     """
     md_content = []
 
-    for file, definitions in parsed_data.items():
+    for file, data in parsed_data.items():
         md_content.append(f"# {file}\n")
-        md_content.append("## Definitions\n")
-
-        for definition in definitions:
-            md_content.append(f"- {definition}")
         
-        md_content.append("\n")
+        # Agregar variables a nivel de módulo
+        if data['module_level_vars']:
+            md_content.append("## Module Level Variables\n")
+            for var in data['module_level_vars']:
+                md_content.append(f"- {var}")
+            md_content.append("\n")
 
+        # Agregar definiciones de funciones y subrutinas
+        md_content.append("## Definitions\n")
+        for definition in data['definitions']:
+            md_content.append(f"- **{definition['type']}**: {definition['definition']}")
+            # Agregar variables locales con un nivel de indentación mayor
+            if definition['local_vars']:
+                md_content.append("  - **Local Variables**:")
+                for local_var in definition['local_vars']:
+                    md_content.append(f"    - {local_var}")
+            md_content.append("\n")
+    
     return "\n".join(md_content)
+
 
 
